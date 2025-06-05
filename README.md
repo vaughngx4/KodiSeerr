@@ -35,7 +35,7 @@ KodiSeerr is a lightweight and user-friendly Kodi add-on that lets you browse, s
    - Click the box icon (top left) → **Install from repository**
    - Select → **Video**
    - Select the addon → **KodiSeerr**
-   - Open the KodiSeerr add-on
+   - Once installed, open the KodiSeerr add-on
 4. Go to **Settings** inside the addon and enter:
    - Your JellySeerr or OverSeerr URL (e.g. `http://192.168.0.100:5055`)
    - Your **username or email**

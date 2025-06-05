@@ -8,5 +8,7 @@
         <setting id="enable_ask_4k" type="bool" label="Enable asking for 4K" default="true" />
         <setting id="enable_request_notifications" type="bool" label="Enable Request Notifications" default="true" />
         <setting id="polling_interval" type="number" label="Polling Interval (Seconds)" default="300" />
+        <setting id="view_mode_movies" type="number" label="Preferred Movie View Mode" default="0" />
+        <setting id="view_mode_tvshows" type="number" label="Preferred TV Show View Mode" default="0" />
     </category>
 </settings>

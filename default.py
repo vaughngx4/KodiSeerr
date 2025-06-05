@@ -12,6 +12,12 @@ addon_handle = int(sys.argv[1])
 base_url = sys.argv[0]
 args = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
 
+preferred_movie_view = int(addon.getSetting("view_mode_movies") or 0)
+preferred_tv_view = int(addon.getSetting("view_mode_tvshows") or 0)
+
+
+max_search_history = 10
+
 image_base = "https://image.tmdb.org/t/p/w500"
 enable_ask_4k = addon.getSettingBool('enable_ask_4k')
 
@@ -133,6 +139,70 @@ def set_info_tag(list_item, info):
     if info.get('country'): info_tag.setCountry(info['country'])
     if info.get('mediatype'): info_tag.setMediaType(info['mediatype'])
 
+def render_media_items(items, current_page=1, total_pages=1, mode=None, genre_id=None, display_type=None):
+    # Determine Kodi content type based on mode or display_type
+    if mode in ['popular_movies', 'upcoming_movies']:
+        content_type = 'movies'
+    elif mode in ['popular_tv', 'upcoming_tv']:
+        content_type = 'tvshows'
+    elif mode == 'genre':
+        content_type = 'movies' if display_type == 'movies' else 'tvshows'
+    else:
+        content_type = 'movies'
+
+    if content_type == 'movies' and preferred_movie_view:
+        xbmc.executebuiltin(f'Container.SetViewMode({preferred_movie_view})')
+    elif content_type == 'tvshows' and preferred_tv_view:
+        xbmc.executebuiltin(f'Container.SetViewMode({preferred_tv_view})')
+
+    xbmcplugin.setContent(addon_handle, content_type)
+
+    # Show page info if pagination exists
+    if total_pages > 1:
+        page_info = xbmcgui.ListItem(label=f'[I]Page {current_page} of {total_pages}[/I]')
+        xbmcplugin.addDirectoryItem(addon_handle, '', page_info, False)
+
+        # Previous Page
+        if current_page > 1:
+            params = {'mode': mode, 'page': current_page - 1}
+            if mode == "genre":
+                params['genre_id'] = genre_id
+                params['display_type'] = display_type
+            prev_page_url = build_url(params)
+            prev_item = xbmcgui.ListItem(label=f'[B]<< Previous Page ({current_page - 1})[/B]')
+            xbmcplugin.addDirectoryItem(addon_handle, prev_page_url, prev_item, True)
+
+    # Media Items
+    for item in items:
+        media_type = item.get('mediaType', 'movie')
+        title = item.get('title') or item.get('name') or "Untitled"
+        release_date = item.get('releaseDate') or item.get('firstAirDate')
+        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
+        label = f"{title} ({year})" if year else title
+
+        url = build_url({'mode': 'list_seasons', 'id': item['id']}) if media_type == 'tv' else \
+              build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
+
+        list_item = xbmcgui.ListItem(label=label)
+        info = make_info(item, media_type)
+        art = make_art(item)
+        set_info_tag(list_item, info)
+        list_item.setArt(art)
+        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+
+    # Next Page
+    if total_pages > 1 and current_page < total_pages:
+        params = {'mode': mode, 'page': current_page + 1}
+        if mode == "genre":
+            params['genre_id'] = genre_id
+            params['display_type'] = display_type
+        next_page_url = build_url(params)
+        next_item = xbmcgui.ListItem(label=f'[B]Next Page ({current_page + 1}) >>[/B]')
+        xbmcplugin.addDirectoryItem(addon_handle, next_page_url, next_item, True)
+
+    xbmcplugin.endOfDirectory(addon_handle)
+
+
 def list_main_menu():
     xbmcplugin.addDirectoryItem(addon_handle, build_url({'mode': 'trending'}), xbmcgui.ListItem('Trending'), True)
     xbmcplugin.addDirectoryItem(addon_handle, build_url({'mode': 'popular_movies'}), xbmcgui.ListItem('Popular Movies'), True)
@@ -161,56 +231,14 @@ def list_items(data, mode, display_type=None, genre_id=None):
     current_page = data.get('page', 1)
     total_pages = data.get('totalPages', 1)
 
-    # Show page info
-    page_info = xbmcgui.ListItem(label=f'[I]Page {current_page} of {total_pages}[/I]')
-    xbmcplugin.addDirectoryItem(addon_handle, '', page_info, False)
-
-    # Previous Page
-    if current_page > 1:
-        params = {
-            'mode': mode,
-            'page': current_page - 1
-        }
-        if mode == "genre":
-            params['genre_id'] = genre_id
-            params['display_type'] = display_type
-        prev_page_url = build_url(params)
-        prev_item = xbmcgui.ListItem(label=f'[B]<< Previous Page ({current_page - 1})[/B]')
-        xbmcplugin.addDirectoryItem(addon_handle, prev_page_url, prev_item, True)
-
-    # Media Items
-    for item in items:
-        media_type = item.get('mediaType')
-        title = item.get('title') or item.get('name')
-        release_date = item.get('releaseDate') or item.get('firstAirDate')
-        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
-        label = f"{title} ({year})" if year else title
-        id = item.get('id')
-        if media_type == 'tv':
-            url = build_url({'mode': 'list_seasons', 'id': item['id']})
-        else:  # assume it's a movie
-            url = build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
-        list_item = xbmcgui.ListItem(label=label)
-        info = make_info(item, media_type)
-        art = make_art(item)
-        set_info_tag(list_item, info)
-        list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
-
-    # Next Page
-    if current_page < total_pages:
-        params = {
-            'mode': mode,
-            'page': current_page + 1
-        }
-        if mode == "genre":
-            params['genre_id'] = genre_id
-            params['display_type'] = display_type
-        next_page_url = build_url(params)
-        next_item = xbmcgui.ListItem(label=f'[B]Next Page ({current_page + 1}) >>[/B]')
-        xbmcplugin.addDirectoryItem(addon_handle, next_page_url, next_item, True)
-
-    xbmcplugin.endOfDirectory(addon_handle)
+    render_media_items(
+        items=items,
+        current_page=current_page,
+        total_pages=total_pages,
+        mode=mode,
+        genre_id=genre_id,
+        display_type=display_type
+    )
 
 def do_request(media_type, id):
     is4k = False
@@ -364,8 +392,6 @@ def list_episodes(tv_id, season_number):
         xbmcplugin.addDirectoryItem(addon_handle, '', list_item, False)
     xbmcplugin.endOfDirectory(addon_handle)
 
-MAX_HISTORY = 10
-
 def get_search_history():
     raw = xbmcaddon.Addon().getSetting("search_history") or ""
     try:
@@ -380,17 +406,15 @@ def add_to_search_history(query):
     history = get_search_history()
     history = [item for item in history if item["query"] != query]
     history.insert(0, {"query": query})
-    save_search_history(history[:10])  # keep only the 10 most recent searches
+    save_search_history(history[:max_search_history])
 
 def clear_search_history():
     xbmcaddon.Addon().setSetting("search_history", "")
 
-
 def search(query=None):
     if not query:
         history = get_search_history()
-        options = ["New Search"]
-        options += [item["query"] for item in history]
+        options = ["New Search"] + [item["query"] for item in history]
         if history:
             options.append("Clear Search History")
 
@@ -410,37 +434,11 @@ def search(query=None):
 
     add_to_search_history(query)
     data = api_client.client.api_request('/search', params={'query': query})
-    if not data:
-        xbmcgui.Dialog().notification("KodiSeerr", "Search failed or returned no data", xbmcgui.NOTIFICATION_ERROR, 3000)
+    if not data or not data.get('results'):
+        xbmcgui.Dialog().notification("KodiSeerr", "No results found", xbmcgui.NOTIFICATION_INFO, 3000)
         return
 
-    results = data.get('results', [])
-    if not results:
-        xbmcgui.Dialog().notification("KodiSeerr", "No results found", xbmcgui.NOTIFICATION_INFO, 3000)
-
-    for item in results:
-        media_type = item.get('mediaType', 'movie')
-        title = item.get('title') or item.get('name') or "Untitled"
-        release_date = item.get('releaseDate') or item.get('firstAirDate')
-        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
-        type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
-        full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
-        media_id = item.get('id')
-        if not media_id:
-            continue
-        if media_type == 'tv':
-            url = build_url({'mode': 'list_seasons', 'id': item['id']})
-        else:
-            url = build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
-        list_item = xbmcgui.ListItem(label=full_title)
-        info = make_info(item, media_type)
-        art = make_art(item)
-        set_info_tag(list_item, info)
-        list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
-
-    xbmcplugin.endOfDirectory(addon_handle)
-
+    render_media_items(data.get('results', []))  # No pagination info needed here
 
 
 mode = args.get('mode')
