@@ -5,6 +5,7 @@ import xbmcgui
 import xbmcaddon
 import urllib.parse
 import api_client
+import json
 
 addon = xbmcaddon.Addon()
 addon_handle = int(sys.argv[1])
@@ -185,7 +186,10 @@ def list_items(data, mode, display_type=None, genre_id=None):
         year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
         label = f"{title} ({year})" if year else title
         id = item.get('id')
-        url = build_url({'mode': 'request', 'type': media_type, 'id': id})
+        if media_type == 'tv':
+            url = build_url({'mode': 'list_seasons', 'id': item['id']})
+        else:  # assume it's a movie
+            url = build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
         list_item = xbmcgui.ListItem(label=label)
         info = make_info(item, media_type)
         art = make_art(item)
@@ -225,6 +229,38 @@ def do_request(media_type, id):
         xbmcgui.Dialog().notification('KodiSeerr', 'Request Sent!', xbmcgui.NOTIFICATION_INFO, 3000)
     except Exception as e:
         xbmcgui.Dialog().notification('KodiSeerr', f'Request Failed: {str(e)}', xbmcgui.NOTIFICATION_ERROR, 4000)
+    xbmc.executebuiltin("Action(Back)")
+
+def do_request_seasons(tv_id, selected_seasons):
+    is4k = False
+    if enable_ask_4k:
+        if xbmcgui.Dialog().yesno('KodiSeerr', 'Request in 4K quality?'):
+            is4k = True
+
+    # Build the payload with all selected seasons
+    payload = {
+        "mediaType": "tv",
+        "mediaId": int(tv_id),
+        "seasons": [int(s) for s in selected_seasons],
+        "is4k": is4k
+    }
+
+    try:
+        api_client.client.api_request("/request", method="POST", data=payload)
+        xbmcgui.Dialog().notification(
+            'KodiSeerr',
+            f'Request sent for seasons: {", ".join(map(str, selected_seasons))}',
+            xbmcgui.NOTIFICATION_INFO,
+            3000
+        )
+    except Exception as e:
+        xbmcgui.Dialog().notification(
+            'KodiSeerr',
+            f'Request Failed: {str(e)}',
+            xbmcgui.NOTIFICATION_ERROR,
+            4000
+        )
+
     xbmc.executebuiltin("Action(Back)")
 
 def show_requests(data, mode):
@@ -279,17 +315,37 @@ def list_seasons(tv_id):
     data = api_client.client.api_request(f"/tv/{tv_id}")
     seasons = data.get('seasons', [])
     show_title = data.get('title') or data.get('name')
+
+    if not seasons:
+        xbmcgui.Dialog().notification("KodiSeerr", "No seasons found", xbmcgui.NOTIFICATION_INFO)
+        xbmcplugin.endOfDirectory(addon_handle)
+        return
+
+    # Build season display names
+    season_choices = []
+    season_numbers = []
+
     for season in seasons:
         season_number = season.get('seasonNumber', 0)
         season_name = season.get('name', f"Season {season_number}")
         label = f"{show_title} - {season_name}"
-        url = build_url({'mode': 'season', 'tv_id': tv_id, 'season': season_number})
-        list_item = xbmcgui.ListItem(label=label)
-        info = make_info(season, 'season')
-        art = make_art(season)
-        set_info_tag(list_item, info)
-        list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, True)
+        season_choices.append(label)
+        season_numbers.append(season_number)
+
+    # Show multiselect dialog
+    selected = xbmcgui.Dialog().multiselect("Select Seasons to Request", season_choices)
+    if selected is None:
+        xbmcplugin.endOfDirectory(addon_handle)
+        return
+
+    season_numbers = [
+    seasons[i].get('seasonNumber', 0)
+    for i in selected if 0 <= i < len(seasons)
+    ]
+
+    url = build_url({'mode': 'request_seasons', 'tv_id': tv_id, 'seasons': json.dumps(season_numbers)})
+    xbmc.executebuiltin(f'RunPlugin({url})')
+
     xbmcplugin.endOfDirectory(addon_handle)
 
 def list_episodes(tv_id, season_number):
@@ -308,26 +364,84 @@ def list_episodes(tv_id, season_number):
         xbmcplugin.addDirectoryItem(addon_handle, '', list_item, False)
     xbmcplugin.endOfDirectory(addon_handle)
 
-def search():
-    keyboard = xbmcgui.Dialog().input('Search for Movie or TV Show')
-    if keyboard:
-        data = api_client.client.api_request('/search', params={'query': keyboard})
-        results = data.get('results', []) if data else []
-        for item in results:
-            media_type = item.get('mediaType', 'movie')
-            title = item.get('title') or item.get('name')
-            release_date = item.get('releaseDate') or item.get('firstAirDate')
-            year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
-            type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
-            full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
-            url = build_url({'mode': 'request', 'type': media_type, 'id': item.get('id')})
-            list_item = xbmcgui.ListItem(label=full_title)
-            info = make_info(item, media_type)
-            art = make_art(item)
-            set_info_tag(list_item, info)
-            list_item.setArt(art)
-            xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+MAX_HISTORY = 10
+
+def get_search_history():
+    raw = xbmcaddon.Addon().getSetting("search_history") or ""
+    try:
+        return json.loads(raw) if raw else []
+    except Exception:
+        return []
+
+def save_search_history(history):
+    xbmcaddon.Addon().setSetting("search_history", json.dumps(history))
+
+def add_to_search_history(query):
+    history = get_search_history()
+    history = [item for item in history if item["query"] != query]
+    history.insert(0, {"query": query})
+    save_search_history(history[:10])  # keep only the 10 most recent searches
+
+def clear_search_history():
+    xbmcaddon.Addon().setSetting("search_history", "")
+
+
+def search(query=None):
+    if not query:
+        history = get_search_history()
+        options = ["New Search"]
+        options += [item["query"] for item in history]
+        if history:
+            options.append("Clear Search History")
+
+        choice = xbmcgui.Dialog().select("KodiSeerr Search", options)
+        if choice == -1:
+            return
+        elif choice == 0:
+            query = xbmcgui.Dialog().input('Search for Movies or TV Shows')
+            if not query:
+                return
+        elif history and choice == len(options) - 1:
+            if xbmcgui.Dialog().yesno("Clear History", "Are you sure you want to clear your search history?"):
+                clear_search_history()
+            return
+        else:
+            query = history[choice - 1]["query"]
+
+    add_to_search_history(query)
+    data = api_client.client.api_request('/search', params={'query': query})
+    if not data:
+        xbmcgui.Dialog().notification("KodiSeerr", "Search failed or returned no data", xbmcgui.NOTIFICATION_ERROR, 3000)
+        return
+
+    results = data.get('results', [])
+    if not results:
+        xbmcgui.Dialog().notification("KodiSeerr", "No results found", xbmcgui.NOTIFICATION_INFO, 3000)
+
+    for item in results:
+        media_type = item.get('mediaType', 'movie')
+        title = item.get('title') or item.get('name') or "Untitled"
+        release_date = item.get('releaseDate') or item.get('firstAirDate')
+        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
+        type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
+        full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
+        media_id = item.get('id')
+        if not media_id:
+            continue
+        if media_type == 'tv':
+            url = build_url({'mode': 'list_seasons', 'id': item['id']})
+        else:
+            url = build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
+        list_item = xbmcgui.ListItem(label=full_title)
+        info = make_info(item, media_type)
+        art = make_art(item)
+        set_info_tag(list_item, info)
+        list_item.setArt(art)
+        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+
     xbmcplugin.endOfDirectory(addon_handle)
+
+
 
 mode = args.get('mode')
 page = args.get('page')
@@ -350,7 +464,7 @@ elif mode == "upcoming_movies":
 elif mode == "upcoming_tv":
     data = api_client.client.api_request("/discover/tv/upcoming", params={"page": page})
     list_items(data, mode)
-elif mode == "search": # functionality is completely broken
+elif mode == "search":
     search()
 elif mode == "request":
     do_request(args.get('type'), args.get('id'))
@@ -360,10 +474,14 @@ elif mode == "requests":
         show_requests(data, mode)
     else:
         xbmcgui.Dialog().notification("Kodiseerr", "Failed to fetch requests", xbmcgui.NOTIFICATION_ERROR)
-elif mode == "tvshow" and args.get("id"):
+elif mode == "list_seasons" and args.get("id"):
     list_seasons(args.get("id"))
-elif mode == "season" and args.get("tv_id") and args.get("season"):
-    list_episodes(args.get("tv_id"), int(args.get("season")))
+elif mode == 'request_seasons' and args.get("tv_id") and args.get("seasons"):
+    tv_id = int(args.get("tv_id"))
+    selected = json.loads(args.get("seasons"))
+    do_request_seasons(tv_id, selected)
+# elif mode == "season" and args.get("tv_id") and args.get("season"):
+#     list_episodes(args.get("tv_id"), int(args.get("season")))
 elif mode == "genres" and args.get("media_type"):
     list_genres(args.get("media_type"))
 elif mode == "genre" and args.get("display_type") and args.get("genre_id"):
