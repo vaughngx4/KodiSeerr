@@ -181,7 +181,7 @@ def render_media_items(items, current_page=1, total_pages=1, mode=None, genre_id
         label = f"{title} ({year})" if year else title
 
         url = build_url({'mode': 'list_seasons', 'id': item['id']}) if media_type == 'tv' else \
-              build_url({'action': 'request', 'type': 'movie', 'id': item['id']})
+            build_url({'mode': 'request', 'type': 'movie', 'id': item['id']})
 
         list_item = xbmcgui.ListItem(label=label)
         info = make_info(item, media_type)
