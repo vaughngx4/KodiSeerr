@@ -6,8 +6,10 @@ import xbmcaddon
 import urllib.parse
 import api_client
 import json
+from resources.lib.media_dialog import MediaDialog
 
 addon = xbmcaddon.Addon()
+addon_path = addon.getAddonInfo('path')
 addon_handle = int(sys.argv[1])
 base_url = sys.argv[0]
 args = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
@@ -15,10 +17,9 @@ args = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
 preferred_movie_view = int(addon.getSetting("view_mode_movies") or 0)
 preferred_tv_view = int(addon.getSetting("view_mode_tvshows") or 0)
 
-
 max_search_history = 10
-
-image_base = "https://image.tmdb.org/t/p/w500"
+image_base_small = "https://image.tmdb.org/t/p/w500"
+image_base_large = "https://image.tmdb.org/t/p/original"
 enable_ask_4k = addon.getSettingBool('enable_ask_4k')
 
 def build_url(query):
@@ -29,20 +30,20 @@ def make_art(item):
     for k in ["posterPath", "backdropPath", "logoPath", "bannerPath", "landscapePath", "iconPath", "clearartPath"]:
         if item.get(k):
             if k == "posterPath":
-                art["poster"] = image_base + item[k]
-                art["thumb"] = image_base + item[k]
+                art["poster"] = image_base_small + item[k]
+                art["thumb"] = image_base_small + item[k]
             elif k == "backdropPath":
-                art["fanart"] = image_base + item[k]
+                art["fanart"] = image_base_large + item[k]
             elif k == "logoPath":
-                art["clearlogo"] = image_base + item[k]
+                art["clearlogo"] = image_base_small + item[k]
             elif k == "bannerPath":
-                art["banner"] = image_base + item[k]
+                art["banner"] = image_base_small + item[k]
             elif k == "landscapePath":
-                art["landscape"] = image_base + item[k]
+                art["landscape"] = image_base_small + item[k]
             elif k == "iconPath":
-                art["icon"] = image_base + item[k]
+                art["icon"] = image_base_small + item[k]
             elif k == "clearartPath":
-                art["clearart"] = image_base + item[k]
+                art["clearart"] = image_base_small + item[k]
     return art
 
 def make_info(item, media_type):
@@ -108,14 +109,17 @@ def make_info(item, media_type):
 
 def set_info_tag(list_item, info):
     info_tag = list_item.getVideoInfoTag()
-    if info.get('title'): info_tag.setTitle(info['title'])
-    if info.get('plot'): info_tag.setPlot(info['plot'])
+
+    # Safe InfoTagVideo setters
+    if info.get('title'):
+        info_tag.setTitle(info['title'])
+    if info.get('plot'):
+        info_tag.setPlot(info['plot'])
     if info.get('year'):
         try:
             info_tag.setYear(int(info['year']))
         except Exception:
             pass
-    if info.get('genre'): info_tag.setGenre(info['genre'])
     if info.get('rating'):
         try:
             info_tag.setRating(float(info['rating']))
@@ -126,18 +130,33 @@ def set_info_tag(list_item, info):
             info_tag.setVotes(int(info['votes']))
         except Exception:
             pass
-    if info.get('premiered'): info_tag.setPremiered(info['premiered'])
+    if info.get('premiered'):
+        info_tag.setPremiered(info['premiered'])
     if info.get('duration'):
         try:
             info_tag.setDuration(int(info['duration']))
         except Exception:
             pass
-    if info.get('mpaa'): info_tag.setMpaa(info['mpaa'])
-    if info.get('cast'): info_tag.setCast(info['cast'])
-    if info.get('director'): info_tag.setDirector(info['director'])
-    if info.get('studio'): info_tag.setStudio(info['studio'])
-    if info.get('country'): info_tag.setCountry(info['country'])
-    if info.get('mediatype'): info_tag.setMediaType(info['mediatype'])
+    if info.get('mpaa'):
+        info_tag.setMpaa(info['mpaa'])
+    if info.get('director'):
+        info_tag.setDirector(info['director'])
+    if info.get('studio'):
+        info_tag.setStudio(info['studio'])
+
+    # Fallback to setInfo for unsupported InfoTagVideo attributes
+    fallback_info = {}
+    if info.get('genre'):
+        fallback_info['genre'] = info['genre']
+    if info.get('cast'):
+        fallback_info['cast'] = info['cast']
+    if info.get('country'):
+        fallback_info['country'] = info['country']
+    if info.get('mediatype'):
+        fallback_info['mediatype'] = info['mediatype']
+
+    if fallback_info:
+        list_item.setInfo('video', fallback_info)
 
 def render_media_items(items, current_page=1, total_pages=1, mode=None, genre_id=None, display_type=None):
     # Determine Kodi content type based on mode or display_type
@@ -174,21 +193,28 @@ def render_media_items(items, current_page=1, total_pages=1, mode=None, genre_id
 
     # Media Items
     for item in items:
+        id = item.get('id')
         media_type = item.get('mediaType', 'movie')
         title = item.get('title') or item.get('name') or "Untitled"
         release_date = item.get('releaseDate') or item.get('firstAirDate')
         year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
         label = f"{title} ({year})" if year else title
 
-        url = build_url({'mode': 'list_seasons', 'id': item['id']}) if media_type == 'tv' else \
-            build_url({'mode': 'request', 'type': 'movie', 'id': item['id']})
+        url = build_url({
+            'mode': 'media',
+            'media_type': media_type,
+            'media_id': str(id),
+        })
+
+        # url = build_url({'mode': 'list_seasons', 'id': item['id']}) if media_type == 'tv' else \
+        #     build_url({'mode': 'request', 'type': 'movie', 'id': item['id']})
 
         list_item = xbmcgui.ListItem(label=label)
         info = make_info(item, media_type)
         art = make_art(item)
         set_info_tag(list_item, info)
         list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, True)
 
     # Next Page
     if total_pages > 1 and current_page < total_pages:
@@ -201,7 +227,6 @@ def render_media_items(items, current_page=1, total_pages=1, mode=None, genre_id
         xbmcplugin.addDirectoryItem(addon_handle, next_page_url, next_item, True)
 
     xbmcplugin.endOfDirectory(addon_handle)
-
 
 def list_main_menu():
     xbmcplugin.addDirectoryItem(addon_handle, build_url({'mode': 'trending'}), xbmcgui.ListItem('Trending'), True)
@@ -253,11 +278,11 @@ def do_request(media_type, id):
     if media_type == "tv":
         payload["seasons"] = "all"
     try:
+        xbmcgui.Dialog().notification('KodiSeerr', 'Processing Request...', xbmcgui.NOTIFICATION_INFO, 3000)
         api_client.client.api_request("/request", method="POST", data=payload)
         xbmcgui.Dialog().notification('KodiSeerr', 'Request Sent!', xbmcgui.NOTIFICATION_INFO, 3000)
     except Exception as e:
         xbmcgui.Dialog().notification('KodiSeerr', f'Request Failed: {str(e)}', xbmcgui.NOTIFICATION_ERROR, 4000)
-    xbmc.executebuiltin("Action(Back)")
 
 def do_request_seasons(tv_id, selected_seasons):
     is4k = False
@@ -274,6 +299,7 @@ def do_request_seasons(tv_id, selected_seasons):
     }
 
     try:
+        xbmcgui.Dialog().notification('KodiSeerr', 'Processing Request...', xbmcgui.NOTIFICATION_INFO, 3000)
         api_client.client.api_request("/request", method="POST", data=payload)
         xbmcgui.Dialog().notification(
             'KodiSeerr',
@@ -289,55 +315,95 @@ def do_request_seasons(tv_id, selected_seasons):
             4000
         )
 
-    xbmc.executebuiltin("Action(Back)")
-
 def show_requests(data, mode):
     items = data.get('results', [])
-    current_page = data.get('page', 1)
-    total_pages = data.get('totalPages', 1)
 
-    # Show page info
-    page_info = xbmcgui.ListItem(label=f'[I]Page {current_page} of {total_pages}[/I]')
-    xbmcplugin.addDirectoryItem(addon_handle, '', page_info, False)
-
-    # Previous Page
-    if current_page > 1:
-        prev_page_url = build_url({'mode': mode, 'page': current_page - 1})
-        prev_item = xbmcgui.ListItem(label=f'[B]<< Previous Page ({current_page - 1})[/B]')
-        xbmcplugin.addDirectoryItem(addon_handle, prev_page_url, prev_item, True)
+    status_map = {
+        3: "[COLOR blue](Requested)[/COLOR]",
+        4: "[COLOR lime](Partially Available)[/COLOR]",
+        5: "[COLOR lime](Available)[/COLOR]"
+    }
 
     for item in items:
         media = item.get('media', {})
+        if not media or not media.get('tmdbId') or not media.get('mediaType'):
+            continue
+
         id = media.get('tmdbId')
         media_type = media.get('mediaType')
+
         mediaData = api_client.client.api_request(f"/{media_type}/{id}", params={})
-        label_text = mediaData.get('title') or mediaData.get('name') or "Untitled"
+
+        title = mediaData.get('title') or mediaData.get('name') or f"ID {id}"
+        overview = mediaData.get('overview', '')
+        release_date = mediaData.get('releaseDate', '')
+        vote = mediaData.get('voteAverage')
+        runtime = mediaData.get('runtime')
+        tagline = mediaData.get('tagline')
+        genres = ", ".join(g['name'] for g in mediaData.get('genres', []))
 
         status = media.get('status')
-        info = {}
-        if status == 3:
-            label_text += " [COLOR blue](Requested)[/COLOR]"
-        elif status == 4:
-            label_text += " [COLOR lime](Partially Available)[/COLOR]"
-        elif status == 5:
-            label_text += " [COLOR lime](Available)[/COLOR]"
+        label_text = f"{title} {status_map.get(status, '')}"
 
-        url = ""  # build_url({'mode': 'request_view', 'type': media_type, 'id': id})
+        url = build_url({
+            'mode': 'media',
+            'media_type': media_type,
+            'media_id': str(id),
+        })
+
         list_item = xbmcgui.ListItem(label=label_text)
-        info['title'] = label_text
-        info['plot'] = f"Media ID: {id}, Type: {media_type}"
+
+        info = {
+            'title': title,
+            'plot': f"{overview}\n\nGenres: {genres}\nRuntime: {runtime} min\nRating: {vote}\nRelease: {release_date}",
+            'tagline': tagline,
+            'genre': genres,
+            'duration': runtime,
+            'rating': vote,
+            'year': int(release_date.split('-')[0]) if release_date else None
+        }
         set_info_tag(list_item, info)
+
         art = make_art(mediaData)
         list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
 
-    # Next Page
-    if current_page < total_pages:
-        next_page_url = build_url({'mode': mode, 'page': current_page + 1})
-        next_item = xbmcgui.ListItem(label=f'[B]Next Page ({current_page + 1}) >>[/B]')
-        xbmcplugin.addDirectoryItem(addon_handle, next_page_url, next_item, True)
+        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, isFolder=True)
+    xbmcplugin.endOfDirectory(addon_handle)
 
-    xbmcplugin.endOfDirectory(addon_handle)    
+def launch_media_dialog(mediaData):
+    media = mediaData.copy()
+    media.update({
+        'title': mediaData.get('title') or mediaData.get('name', 'Unknown Title'),
+        'poster': image_base_small + mediaData.get('posterPath', ''),
+        'fanart': image_base_large + mediaData.get('backdropPath', '')
+    })
+    dialog = MediaDialog(
+        'MediaDetailDialog.xml',
+        addon_path,
+        'Default',
+        '720p',
+        media=media,
+    )
+    dialog.doModal()
+    del dialog
+
+def add_request_button(media_type, media_id):
+    if media_type == "movie":
+        request_url = build_url({'mode': 'request', 'type': media_type, 'id': media_id})
+        item = xbmcgui.ListItem(label='[B][COLOR yellow]Request Movie[/COLOR][/B]')
+        xbmcplugin.addDirectoryItem(addon_handle, request_url, item, isFolder=False)
+
+    elif media_type == "tv":
+        seasons_url = build_url({'mode': 'list_seasons', 'id': media_id})
+        item = xbmcgui.ListItem(label='[B][COLOR yellow]Request More Seasons[/COLOR][/B]')
+        xbmcplugin.addDirectoryItem(addon_handle, seasons_url, item, isFolder=True)
+
+def add_watch_button(mediaData):
+    media_url = mediaData.get('mediaInfo', {}).get('mediaUrl') or mediaData.get('mediaUrl')
+    if media_url:
+        item = xbmcgui.ListItem(label='[B][COLOR lime]▶ Watch Now[/COLOR][/B]')
+        item.setProperty('IsPlayable', 'true')
+        xbmcplugin.addDirectoryItem(addon_handle, media_url, item, isFolder=False)
 
 def list_seasons(tv_id):
     data = api_client.client.api_request(f"/tv/{tv_id}")
@@ -374,22 +440,6 @@ def list_seasons(tv_id):
     url = build_url({'mode': 'request_seasons', 'tv_id': tv_id, 'seasons': json.dumps(season_numbers)})
     xbmc.executebuiltin(f'RunPlugin({url})')
 
-    xbmcplugin.endOfDirectory(addon_handle)
-
-def list_episodes(tv_id, season_number):
-    data = api_client.client.api_request(f"/tv/{tv_id}/season/{season_number}")
-    episodes = data.get('episodes', [])
-    show_title = data.get('show', {}).get('name') or data.get('show', {}).get('title', '')
-    for ep in episodes:
-        ep_num = ep.get('episodeNumber', 0)
-        title = ep.get('name') or ep.get('title', f"Episode {ep_num}")
-        label = f"S{season_number:02d}E{ep_num:02d} - {title}"
-        list_item = xbmcgui.ListItem(label=label)
-        info = make_info(ep, 'episode')
-        art = make_art(ep)
-        set_info_tag(list_item, info)
-        list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, '', list_item, False)
     xbmcplugin.endOfDirectory(addon_handle)
 
 def get_search_history():
@@ -440,7 +490,6 @@ def search(query=None):
 
     render_media_items(data.get('results', []))  # No pagination info needed here
 
-
 mode = args.get('mode')
 page = args.get('page')
 if not page:
@@ -449,37 +498,50 @@ if not mode:
     list_main_menu()
 elif mode == "trending":
     data = api_client.client.api_request("/discover/trending", params={"page": page})
-    list_items(data, mode)
+    if data:
+        list_items(data, mode)
+    else:
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "popular_movies":
     data = api_client.client.api_request("/discover/movies", params={"sortBy": "popularity.desc", "page": page})
-    list_items(data, mode)
+    if data:
+        list_items(data, mode)
+    else:
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "popular_tv":
     data = api_client.client.api_request("/discover/tv", params={"sortBy": "popularity.desc", "page": page})
-    list_items(data, mode)
+    if data:
+        list_items(data, mode)
+    else:
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "upcoming_movies":
     data = api_client.client.api_request("/discover/movies/upcoming", params={"page": page})
-    list_items(data, mode)
+    if data:
+        list_items(data, mode)
+    else:
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "upcoming_tv":
     data = api_client.client.api_request("/discover/tv/upcoming", params={"page": page})
-    list_items(data, mode)
+    if data:
+        list_items(data, mode)
+    else:
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "search":
     search()
 elif mode == "request":
     do_request(args.get('type'), args.get('id'))
 elif mode == "requests":
-    data = api_client.client.api_request("/request", params={"sort": "added", "filter": "all", "sortDirection": "desc"})
+    data = api_client.client.api_request('/request', params={'sort': 'added', 'filter': 'all', 'sortDirection': 'desc', 'take': 25})
     if data:
         show_requests(data, mode)
     else:
-        xbmcgui.Dialog().notification("Kodiseerr", "Failed to fetch requests", xbmcgui.NOTIFICATION_ERROR)
+        xbmcgui.Dialog().notification("Kodiseerr", "API Error", xbmcgui.NOTIFICATION_ERROR)
 elif mode == "list_seasons" and args.get("id"):
     list_seasons(args.get("id"))
 elif mode == 'request_seasons' and args.get("tv_id") and args.get("seasons"):
     tv_id = int(args.get("tv_id"))
     selected = json.loads(args.get("seasons"))
     do_request_seasons(tv_id, selected)
-# elif mode == "season" and args.get("tv_id") and args.get("season"):
-#     list_episodes(args.get("tv_id"), int(args.get("season")))
 elif mode == "genres" and args.get("media_type"):
     list_genres(args.get("media_type"))
 elif mode == "genre" and args.get("display_type") and args.get("genre_id"):
@@ -487,3 +549,9 @@ elif mode == "genre" and args.get("display_type") and args.get("genre_id"):
     genre_id = args.get("genre_id")
     data = api_client.client.api_request(f"/discover/{display_type}/genre/{genre_id}", params={"page": page})
     list_items(data, mode, display_type, genre_id)
+elif mode == "media" and args.get("media_type") and args.get("media_id"):
+    media_type = args.get("media_type")
+    media_id = args.get("media_id")
+    mediaData = api_client.client.api_request(f"/{media_type}/{media_id}", params={})
+    launch_media_dialog(mediaData)
+    sys.exit()

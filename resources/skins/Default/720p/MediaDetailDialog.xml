@@ -1,0 +1,210 @@
+<window type="dialog">
+    <defaultcontrol always="true">105</defaultcontrol>
+
+    <coordinates>
+        <system>720</system>
+    </coordinates>
+
+    <controls>
+
+        <!-- Background -->
+        <control type="image">
+            <posx>0</posx>
+            <posy>0</posy>
+            <width>1280</width>
+            <height>720</height>
+            <texture>special://home/addons/plugin.video.kodiseerr/resources/media/black.png</texture>
+        </control>
+
+        <!-- Poster -->
+        <control type="image" id="100">
+            <posx>80</posx>
+            <posy>60</posy>
+            <width>280</width>
+            <height>420</height>
+        </control>
+
+        <!-- Title -->
+        <control type="label" id="101">
+            <posx>400</posx>
+            <posy>60</posy>
+            <width>800</width>
+            <height>40</height>
+            <font>font30_title</font>
+            <textcolor>FFFFFFFF</textcolor>
+        </control>
+
+        <!-- Tagline -->
+        <control type="label" id="102">
+            <posx>400</posx>
+            <posy>110</posy>
+            <width>800</width>
+            <height>30</height>
+            <font>font24</font>
+            <textcolor>FFAAAAAA</textcolor>
+        </control>
+
+        <!-- Overview -->
+        <control type="textbox" id="103">
+            <posx>400</posx>
+            <posy>150</posy>
+            <width>780</width>
+            <height>100</height>
+            <font>font20</font>
+            <textcolor>FFFFFFFF</textcolor>
+        </control>
+
+        <!-- Metadata (2 columns) -->
+        <control type="label" id="110">
+            <description>Release Date</description>
+            <posx>400</posx>
+            <posy>270</posy>
+            <width>300</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="111">
+            <description>Rating</description>
+            <posx>400</posx>
+            <posy>300</posy>
+            <width>300</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="112">
+            <description>Genres</description>
+            <posx>400</posx>
+            <posy>330</posy>
+            <width>300</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="113">
+            <description>Runtime</description>
+            <posx>700</posx>
+            <posy>270</posy>
+            <width>300</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="114">
+            <description>Languages</description>
+            <posx>700</posx>
+            <posy>300</posy>
+            <width>300</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="115">
+            <description>Top Cast</description>
+            <posx>400</posx>
+            <posy>370</posy>
+            <width>700</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <control type="label" id="116">
+            <description>Production Companies</description>
+            <posx>400</posx>
+            <posy>400</posy>
+            <width>700</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <!-- Seasons & Episodes -->
+        <control type="label" id="117">
+            <description>Seasons and Episodes</description>
+            <posx>400</posx>
+            <posy>430</posy>
+            <width>700</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <!-- TV Show Status -->
+        <control type="label" id="118">
+            <description>Show Status</description>
+            <posx>400</posx>
+            <posy>460</posy>
+            <width>700</width>
+            <height>25</height>
+            <font>font13</font>
+            <textcolor>white</textcolor>
+        </control>
+
+        <!-- Status Label -->
+        <control type="label" id="108">
+            <description>Status Text</description>
+            <posx>440</posx>
+            <posy>560</posy>
+            <width>400</width>
+            <height>30</height>
+            <font>font24</font>
+            <textcolor>FFFFFFFF</textcolor>
+        </control>
+
+        <!-- Action Buttons (Bottom Centered) -->
+        <control type="button" id="107">
+            <description>Request</description>
+            <posx>295</posx>
+            <posy>600</posy>
+            <width>200</width>
+            <height>50</height>
+            <onleft>106</onleft>
+            <onright>109</onright>
+            <texturefocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-request-focus.png</texturefocus>
+            <texturenofocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-request-nofocus.png</texturenofocus>
+        </control>
+        
+        <control type="button" id="106">
+            <description>Watch Now</description>
+            <posx>515</posx>
+            <posy>600</posy>
+            <width>200</width>
+            <height>50</height>
+            <onright>107</onright>
+            <texturefocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-watch-focus.png</texturefocus>
+            <texturenofocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-watch-nofocus.png</texturenofocus>
+        </control>
+
+        <control type="button" id="109">
+            <description>Request More</description>
+            <posx>735</posx>
+            <posy>600</posy>
+            <width>250</width>
+            <height>50</height>
+            <onleft>107</onleft>
+            <onright>105</onright>
+            <texturefocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-requestmore-focus.png</texturefocus>
+            <texturenofocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-requestmore-nofocus.png</texturenofocus>
+        </control>
+
+        <!-- Back Button (Bottom-left) -->
+        <control type="button" id="105">
+            <description>Back</description>
+            <posx>1040</posx>
+            <posy>660</posy>
+            <width>200</width>
+            <height>50</height>
+            <onleft>109</onleft>
+            <texturefocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-close-focus.png</texturefocus>
+            <texturenofocus border="5">special://home/addons/plugin.video.kodiseerr/resources/media/buttons/button-close-nofocus.png</texturenofocus>
+        </control>
+
+    </controls>
+</window>
