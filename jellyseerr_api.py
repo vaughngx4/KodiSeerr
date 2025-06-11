@@ -37,7 +37,7 @@ class JellyseerrClient:
 
         self.init_opener()
 
-        login_url = f"{self.base_url}/api/v1/auth/local"
+        login_url = f"{self.base_url}/auth/local"
         data = json.dumps({
             "email": self.username,
             "password": self.password
@@ -61,7 +61,7 @@ class JellyseerrClient:
         if not self.opener:
             self.init_opener()
 
-        url = f"{self.base_url}/api/v1{endpoint}"
+        url = self.base_url + endpoint
         if params:
             safe_params = {k: str(v) for k, v in params.items()}
             url += '?' + urlencode(safe_params, quote_via=quote)

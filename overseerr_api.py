@@ -2,9 +2,10 @@ import urllib.request
 import urllib.error
 import http.cookiejar
 import ssl
-import json
 import xbmcaddon
 import xbmc
+import json
+from urllib.parse import urlencode, quote
 
 class OverseerrClient:
     def __init__(self, base_url, username, password):
@@ -13,8 +14,7 @@ class OverseerrClient:
         self.password = password
         self.cookie_jar = http.cookiejar.CookieJar()
         self.opener = None  # Will be initialized with SSL context
-
-        self.init_opener()
+        self.logged_in = False
 
     def init_opener(self):
         """Initializes the opener with SSL context based on addon settings."""
@@ -31,31 +31,54 @@ class OverseerrClient:
         self.opener = urllib.request.build_opener(https_handler, cookie_handler)
 
     def login(self):
-        """Logs into the Overseerr server using local auth."""
-        if not self.username or not self.password:
+        """Logs into the Jellyseerr/Overseerr instance."""
+        if self.logged_in:
             return
 
-        login_url = self.base_url + "/auth/local"
+        self.init_opener()
+
+        login_url = f"{self.base_url}/auth/local"
         data = json.dumps({
             "email": self.username,
             "password": self.password
-        }).encode()
+        }).encode('utf-8')
 
-        req = urllib.request.Request(login_url, data=data, headers={
-            "Content-Type": "application/json"
-        })
+        req = urllib.request.Request(login_url, data=data)
+        req.add_header("Content-Type", "application/json")
 
         try:
-            self.opener.open(req)
+            with self.opener.open(req) as resp:
+                resp.read()
+            self.logged_in = True
         except urllib.error.URLError as e:
-            xbmc.log(f"[kodiseerr] Overseerr login failed: {e}", xbmc.LOGERROR)
+            xbmc.log(f"[kodiseerr] Login failed: {e}", xbmc.LOGERROR)
 
-    def get(self, path):
-        """Performs a GET request to the Overseerr API."""
+    def api_request(self, endpoint, method="GET", data=None, params=None):
+        """Sends an authenticated API request to the server."""
+        if not self.logged_in:
+            self.login()
+
+        if not self.opener:
+            self.init_opener()
+
+        url = self.base_url + endpoint
+        if params:
+            safe_params = {k: str(v) for k, v in params.items()}
+            url += '?' + urlencode(safe_params, quote_via=quote)
+
+        if data is not None:
+            data = json.dumps(data).encode('utf-8')
+
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Accept", "application/json")
+        if method == "POST":
+            req.add_header("Content-Type", "application/json")
+
         try:
-            req = urllib.request.Request(self.base_url + path)
-            with self.opener.open(req) as response:
-                return json.load(response)
+            with self.opener.open(req) as resp:
+                return json.loads(resp.read().decode())
         except urllib.error.URLError as e:
-            xbmc.log(f"[kodiseerr] Overseerr GET request failed: {e}", xbmc.LOGERROR)
+            xbmc.log(f"[kodiseerr] API request failed: {e}", xbmc.LOGERROR)
+            xbmc.log(f"[kodiseerr] Failed URL: {url}", xbmc.LOGERROR)
             return None
+
