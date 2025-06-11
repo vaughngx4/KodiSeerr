@@ -8,6 +8,7 @@ import api_client
 
 addon = xbmcaddon.Addon()
 addon_handle = int(sys.argv[1])
+addon_name = addon.getAddonInfo('name')
 base_url = sys.argv[0]
 args = dict(urllib.parse.parse_qsl(sys.argv[2][1:]))
 
@@ -309,24 +310,42 @@ def list_episodes(tv_id, season_number):
     xbmcplugin.endOfDirectory(addon_handle)
 
 def search():
-    keyboard = xbmcgui.Dialog().input('Search for Movie or TV Show')
-    if keyboard:
-        data = api_client.client.api_request('/search', params={'query': keyboard})
-        results = data.get('results', []) if data else []
-        for item in results:
-            media_type = item.get('mediaType', 'movie')
-            title = item.get('title') or item.get('name')
-            release_date = item.get('releaseDate') or item.get('firstAirDate')
-            year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
-            type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
-            full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
-            url = build_url({'mode': 'request', 'type': media_type, 'id': item.get('id')})
-            list_item = xbmcgui.ListItem(label=full_title)
-            info = make_info(item, media_type)
-            art = make_art(item)
-            set_info_tag(list_item, info)
-            list_item.setArt(art)
-            xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+    params = args
+    query = params.get('query', None)
+    filter_media_type = params.get('media_type')
+
+    if query:
+        search_query = query
+    else:
+        keyboard = xbmc.Keyboard('', 'Search for Movie or TV Show')
+        keyboard.setDefault('')
+        keyboard.doModal()
+
+        if keyboard.isConfirmed() and len(keyboard.getText()) > 0:
+            search_query = keyboard.getText()
+        else:
+            return
+
+    data = api_client.client.api_request('/search', params={'query': search_query})
+    results = data.get('results', []) if data else []
+    for item in results:
+        media_type = item.get('mediaType', 'movie')
+        if filter_media_type and media_type != filter_media_type:
+            continue
+
+        title = item.get('title') or item.get('name')
+        release_date = item.get('releaseDate') or item.get('firstAirDate')
+        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
+        type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
+        full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
+        url = build_url({'mode': 'request', 'type': media_type, 'id': item.get('id')})
+        list_item = xbmcgui.ListItem(label=full_title)
+        info = make_info(item, media_type)
+        art = make_art(item)
+        set_info_tag(list_item, info)
+        list_item.setArt(art)
+        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
+
     xbmcplugin.endOfDirectory(addon_handle)
 
 mode = args.get('mode')
