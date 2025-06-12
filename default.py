@@ -465,6 +465,7 @@ def search(query=None):
     params = args
     query = params.get('query', None)
     filter_media_type = params.get('media_type')
+
     if query:
         search_query = query
     else:
@@ -472,6 +473,7 @@ def search(query=None):
         options = ["New Search"] + [item["query"] for item in history]
         if history:
             options.append("Clear Search History")
+
         choice = xbmcgui.Dialog().select("KodiSeerr Search", options)
         if choice == -1:
             return
@@ -485,6 +487,7 @@ def search(query=None):
             return
         else:
             query = history[choice - 1]["query"]
+
     add_to_search_history(query)
     data = api_client.client.api_request('/search', params={'query': query})
     if not data or not data.get('results'):
@@ -493,9 +496,11 @@ def search(query=None):
     results = data.get('results', [])
     if filter_media_type in ['movie', 'tv']:
         results = [item for item in results if item.get('mediaType') == filter_media_type]
+
     if not results:
         xbmcgui.Dialog().notification("KodiSeerr", "No results match your filter", xbmcgui.NOTIFICATION_INFO, 3000)
         return
+
     render_media_items(results)
 
 mode = args.get('mode')
