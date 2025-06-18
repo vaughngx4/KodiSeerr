@@ -469,35 +469,39 @@ def search(query=None):
     if query:
         search_query = query
     else:
-        keyboard = xbmc.Keyboard('', 'Search for Movie or TV Show')
-        keyboard.setDefault('')
-        keyboard.doModal()
+        history = get_search_history()
+        options = ["New Search"] + [item["query"] for item in history]
+        if history:
+            options.append("Clear Search History")
 
-        if keyboard.isConfirmed() and len(keyboard.getText()) > 0:
-            search_query = keyboard.getText()
-        else:
+        choice = xbmcgui.Dialog().select("KodiSeerr Search", options)
+        if choice == -1:
             return
+        elif choice == 0:
+            query = xbmcgui.Dialog().input('Search for Movies or TV Shows')
+            if not query:
+                return
+        elif history and choice == len(options) - 1:
+            if xbmcgui.Dialog().yesno("Clear History", "Are you sure you want to clear your search history?"):
+                clear_search_history()
+            return
+        else:
+            query = history[choice - 1]["query"]
 
-    data = api_client.client.api_request('/search', params={'query': search_query})
-    results = data.get('results', []) if data else []
-    for item in results:
-        media_type = item.get('mediaType', 'movie')
-        if filter_media_type and media_type != filter_media_type:
-            continue
+    add_to_search_history(query)
+    data = api_client.client.api_request('/search', params={'query': query})
+    if not data or not data.get('results'):
+        xbmcgui.Dialog().notification("KodiSeerr", "No results found", xbmcgui.NOTIFICATION_INFO, 3000)
+        return
+    results = data.get('results', [])
+    if filter_media_type in ['movie', 'tv']:
+        results = [item for item in results if item.get('mediaType') == filter_media_type]
 
-        title = item.get('title') or item.get('name')
-        release_date = item.get('releaseDate') or item.get('firstAirDate')
-        year = int(release_date.split("-")[0]) if release_date and release_date.split("-")[0].isdigit() else None
-        type_label = "(Movie)" if media_type == "movie" else "(TV Show)"
-        full_title = f"{title} ({year}) {type_label}" if year else f"{title} {type_label}"
-        url = build_url({'mode': 'request', 'type': media_type, 'id': item.get('id')})
-        list_item = xbmcgui.ListItem(label=full_title)
-        info = make_info(item, media_type)
-        art = make_art(item)
-        set_info_tag(list_item, info)
-        list_item.setArt(art)
-        xbmcplugin.addDirectoryItem(addon_handle, url, list_item, False)
-    xbmcplugin.endOfDirectory(addon_handle)
+    if not results:
+        xbmcgui.Dialog().notification("KodiSeerr", "No results match your filter", xbmcgui.NOTIFICATION_INFO, 3000)
+        return
+
+    render_media_items(results)
 
 mode = args.get('mode')
 page = args.get('page')
