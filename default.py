@@ -462,13 +462,7 @@ def clear_search_history():
     xbmcaddon.Addon().setSetting("search_history", "")
 
 def search(query=None):
-    params = args
-    query = params.get('query', None)
-    filter_media_type = params.get('media_type')
-
-    if query:
-        search_query = query
-    else:
+    if not query:
         history = get_search_history()
         options = ["New Search"] + [item["query"] for item in history]
         if history:
@@ -493,15 +487,8 @@ def search(query=None):
     if not data or not data.get('results'):
         xbmcgui.Dialog().notification("KodiSeerr", "No results found", xbmcgui.NOTIFICATION_INFO, 3000)
         return
-    results = data.get('results', [])
-    if filter_media_type in ['movie', 'tv']:
-        results = [item for item in results if item.get('mediaType') == filter_media_type]
 
-    if not results:
-        xbmcgui.Dialog().notification("KodiSeerr", "No results match your filter", xbmcgui.NOTIFICATION_INFO, 3000)
-        return
-
-    render_media_items(results)
+    render_media_items(data.get('results', []))  # No pagination info needed here
 
 mode = args.get('mode')
 page = args.get('page')
