@@ -15,6 +15,7 @@ class JellyseerrClient:
         self.cookie_jar = http.cookiejar.CookieJar()
         self.opener = None  # Will be initialized with SSL context
         self.logged_in = False
+        self.allowed_user_type = xbmcaddon.Addon().getSetting("allowed_user_type") or "0"
 
     def init_opener(self):
         """Initializes the opener with SSL context based on addon settings."""
@@ -31,27 +32,71 @@ class JellyseerrClient:
         self.opener = urllib.request.build_opener(https_handler, cookie_handler)
 
     def login(self):
-        """Logs into the Jellyseerr/Overseerr instance."""
+        """Logs into the Jellyseerr instance - Endpoints based on allowed user type."""
         if self.logged_in:
             return
 
         self.init_opener()
 
-        login_url = f"{self.base_url}/auth/local"
-        data = json.dumps({
-            "email": self.username,
-            "password": self.password
-        }).encode('utf-8')
+        mode = str(self.allowed_user_type)
+        # 0: local only, 1: remote only, 2: local then remote, 3: remote then local
+        if mode == "0":
+            self._login_local()
+        elif mode == "1":
+            self._login_remote()
+        elif mode == "2":
+            first = self._login_local()
+            if first is False:
+                self._login_remote()
+        elif mode == "3":
+            first = self._login_remote()
+            if first is False:
+                self._login_local()
+        else:
+            # Fallback to local only if setting is unexpected
+            self._login_local()
 
-        req = urllib.request.Request(login_url, data=data)
+    def _make_request(self, url, payload):
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=data)
         req.add_header("Content-Type", "application/json")
-
         try:
             with self.opener.open(req) as resp:
                 resp.read()
-            self.logged_in = True
+            return True
+        except urllib.error.HTTPError as e:
+            # 401/403 should allow fallback
+            if e.code in (401, 403):
+                xbmc.log(f"[kodiseerr] Auth HTTP error {e.code} for {url}", xbmc.LOGWARNING)
+                return False
+            xbmc.log(f"[kodiseerr] Auth failed HTTP {e.code} for {url}", xbmc.LOGERROR)
+            # Non-fallback eligible error
+            return None
         except urllib.error.URLError as e:
-            xbmc.log(f"[kodiseerr] Login failed: {e}", xbmc.LOGERROR)
+            xbmc.log(f"[kodiseerr] Auth network error for {url}: {e}", xbmc.LOGWARNING)
+            return False
+
+    def _login_local(self):
+        login_url = f"{self.base_url}/auth/local"
+        payload = {
+            "email": self.username,
+            "password": self.password,
+        }
+        result = self._make_request(login_url, payload)
+        if result is True:
+            self.logged_in = True
+        return result
+
+    def _login_remote(self):
+        login_url = f"{self.base_url}/auth/jellyfin"
+        payload = {
+            "username": self.username,
+            "password": self.password,
+        }
+        result = self._make_request(login_url, payload)
+        if result is True:
+            self.logged_in = True
+        return result
 
     def api_request(self, endpoint, method="GET", data=None, params=None):
         """Sends an authenticated API request to the server."""

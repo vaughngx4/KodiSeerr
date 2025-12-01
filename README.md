@@ -11,7 +11,7 @@ KodiSeerr is a lightweight and user-friendly Kodi add-on that lets you browse, s
 - 🔍 **Search** for movies and TV shows
 - 🔥 View **Trending** and **Popular** content
 - ✅ **Request** movies or TV shows with a single click
-- 🔐 Uses your JellySeerr **username and password** (no API key required)
+- 🔐 Uses your JellySeerr (or Jellyfin) **username and password** (no API key required)
 - ☕ Easy to install and open-source
 
 ---
